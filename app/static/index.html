@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>公园喷泉启停与水质维护平台</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 3c3 4 5 6.5 5 9.5a5 5 0 0 1-10 0C7 9.5 9 7 12 3z" fill="#2E86C1"/><path d="M5 19c1.2-1 2.4-1 3.5 0s2.3 1 3.5 0 2.3-1 3.5 0 2.3 1 3.5 0" fill="none" stroke="#4C9A57" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </span>
+    <div>
+      <h1>公园喷泉启停与水质维护平台</h1>
+      <p class="sub">区域设备 · 运行计划 · 水质维护 · 复开审批（演示数据）</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <span id="weatherChip" class="chip weather"></span>
+    <label class="role-pick">当前身份
+      <select id="roleSelect">
+        <option value="keeper">养护员</option>
+        <option value="supervisor">主管</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<div id="alertBar" class="alert-bar"></div>
+
+<nav class="tabs" id="tabs">
+  <button data-view="overview" class="active">区域总览</button>
+  <button data-view="calendar">运行日历</button>
+  <button data-view="water">水质记录</button>
+  <button data-view="pumps">泵组状态</button>
+  <button data-view="dosing">药剂台账</button>
+  <button data-view="cleaning">清池流程</button>
+  <button data-view="faults">故障维修</button>
+  <button data-view="reopen">复开审批</button>
+</nav>
+
+<main>
+  <!-- 区域总览 -->
+  <section id="view-overview" class="view active">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>区域总览</h2>
+        <div class="sim-controls">
+          <span class="muted">模拟工况：</span>
+          <select id="simPool"></select>
+          <select id="simScenario">
+            <option value="normal">正常</option>
+            <option value="level_low">水位不足</option>
+            <option value="quality_over">水质超限</option>
+            <option value="nozzle_block">喷头堵塞</option>
+            <option value="overheat">泵体过热</option>
+            <option value="overdose">药剂超量</option>
+          </select>
+          <button class="btn small" id="simApply">注入</button>
+          <button class="btn small ghost" id="simWeatherBadge">天气停运</button>
+        </div>
+      </div>
+      <div id="overviewMap" class="overview-map"></div>
+      <p class="legend muted">
+        <i class="dot blue"></i>池体/喷头　<i class="dot green"></i>植被封控边界　<i class="dot amber"></i>清池锁定　<i class="dot red"></i>故障停运
+        　水质数值标注在池体旁；封控区闯入由巡检模拟触发（见泵组状态页）。
+      </p>
+    </div>
+  </section>
+
+  <!-- 运行日历 -->
+  <section id="view-calendar" class="view">
+    <div class="panel">
+      <div class="panel-head"><h2>运行日历 · 今日时间带</h2><span id="calDate" class="muted"></span></div>
+      <div id="calendarBand" class="calendar-band"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>运行计划</h2></div>
+      <div class="form-row">
+        <select id="schPool"></select>
+        <input type="time" id="schStart" value="13:00">
+        <span class="muted">至</span>
+        <input type="time" id="schEnd" value="13:45">
+        <input type="text" id="schDays" value="1234567" class="w80" title="周一到周日，1=周一">
+        <button class="btn" id="schAdd">新增时段（重叠将被拒绝）</button>
+      </div>
+      <table class="grid" id="scheduleTable"></table>
+      <div class="panel-head mt16"><h3>近日启停与停运原因</h3></div>
+      <table class="grid" id="logsTable"></table>
+    </div>
+  </section>
+
+  <!-- 水质记录 -->
+  <section id="view-water" class="view">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>水质记录</h2>
+        <div>
+          <select id="waterPool"></select>
+          <select id="waterHours">
+            <option value="12">近 12 小时</option>
+            <option value="24" selected>近 24 小时</option>
+            <option value="72">近 72 小时</option>
+          </select>
+        </div>
+      </div>
+      <div id="waterCharts" class="water-charts"></div>
+      <div class="form-row mt16">
+        <span class="muted">人工/复测录入：</span>
+        <input type="number" step="0.01" id="rdLevel" placeholder="水位 0-1" class="w80">
+        <input type="number" step="0.1" id="rdTurb" placeholder="浊度 NTU" class="w100">
+        <input type="number" step="0.01" id="rdChl" placeholder="余氯 mg/L" class="w100">
+        <select id="rdKind"><option value="manual">人工采样</option><option value="retest">复开复测</option></select>
+        <button class="btn" id="rdAdd">录入</button>
+        <button class="btn ghost" id="refillBtn">补水至正常</button>
+      </div>
+      <table class="grid mt16" id="readingsTable"></table>
+    </div>
+  </section>
+
+  <!-- 泵组状态 -->
+  <section id="view-pumps" class="view">
+    <div class="panel">
+      <div class="panel-head"><h2>泵组状态</h2><span class="muted">温度阈值 75℃</span></div>
+      <div id="pumpCards" class="cards"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>喷头组</h2><span class="muted">压力低于 0.18MPa 判堵塞</span></div>
+      <div id="nozzleCards" class="cards"></div>
+      <div class="form-row mt16">
+        <span class="muted">封控区模拟：</span>
+        <select id="intrZone"></select>
+        <button class="btn warn" id="intrusionBtn">模拟游客闯入</button>
+        <button class="btn ghost" id="intrusionClearBtn">确认清空封控区</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 药剂台账 -->
+  <section id="view-dosing" class="view">
+    <div class="panel">
+      <div class="panel-head"><h2>药剂投放台账</h2><span class="muted">投药后进入 30 分钟观察期，超量翻倍并停运</span></div>
+      <div class="form-row">
+        <select id="dosePool"></select>
+        <select id="doseChem"><option>氯片</option><option>絮凝剂</option><option>除藻剂</option></select>
+        <input type="number" id="doseAmount" placeholder="投加量 ml" class="w120">
+        <button class="btn" id="doseAdd">投加</button>
+        <span id="doseHint" class="muted"></span>
+      </div>
+      <table class="grid mt16" id="dosingTable"></table>
+    </div>
+  </section>
+
+  <!-- 清池流程 -->
+  <section id="view-cleaning" class="view">
+    <div class="panel">
+      <div class="panel-head"><h2>清池流程</h2><span class="muted">清池锁定整个水池并暂停计划；完工须复测+喷头试运行后复开</span></div>
+      <div class="flow-steps">
+        <span>① 建任务</span><span>② 锁定水池（停运）</span><span>③ 施工</span>
+        <span>④ 完工待复测</span><span>⑤ 复测+喷头试运行</span><span>⑥ 复开审批</span>
+      </div>
+      <div class="form-row mt16">
+        <select id="cleanPool"></select>
+        <input type="date" id="cleanDate">
+        <button class="btn" id="cleanAdd">建立清池任务</button>
+      </div>
+      <div id="cleaningList" class="task-list"></div>
+    </div>
+  </section>
+
+  <!-- 故障维修 -->
+  <section id="view-faults" class="view">
+    <div class="panel">
+      <div class="panel-head"><h2>故障与处置</h2></div>
+      <table class="grid" id="faultsTable"></table>
+    </div>
+  </section>
+
+  <!-- 复开审批 -->
+  <section id="view-reopen" class="view">
+    <div class="panel">
+      <div class="panel-head"><h2>复开审批</h2>
+        <span class="muted">复测合格：养护员可复开；指标越限：仅主管批准；材料不全将被系统拒绝</span>
+      </div>
+      <div id="reopenList" class="task-list"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot muted">SQLite 存储计划与采样 · 附件存于 data/attachments · 进程内调度 · 模拟适配器（水位/水质/天气）</footer>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

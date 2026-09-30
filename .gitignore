@@ -13,3 +13,8 @@ build/
 轨迹/
 录屏/
 视频/
+data/*.db
+data/attachments/*
+!data/attachments/.gitkeep
+__pycache__/
+*.pyc
