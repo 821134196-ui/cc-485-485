@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>公园喷泉启停与水质维护平台</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>喷泉运维平台<span class="dot"> ·</span></h1>
+  <nav class="tabs" id="tabs">
+    <button data-view="overview" class="active">区域总览</button>
+    <button data-view="calendar">运行日历</button>
+    <button data-view="water">水质记录</button>
+    <button data-view="pumps">泵组状态</button>
+    <button data-view="chemical">药剂台账</button>
+    <button data-view="clean">清池流程</button>
+    <button data-view="fault">故障维修</button>
+    <button data-view="reopen">复开审批</button>
+  </nav>
+  <span class="weather-chip" id="weatherChip"></span>
+  <span class="clock" id="clock"></span>
+</header>
+
+<main>
+  <div class="role-switch">
+    当前身份：
+    <label><input type="radio" name="role" value="keeper" checked><span>养护员</span></label>
+    <label><input type="radio" name="role" value="supervisor"><span>主管</span></label>
+    <span class="hint small" style="margin-left:8px">养护员可处理现场任务；越限复开仅主管可批准。</span>
+  </div>
+
+  <!-- 1 区域总览 -->
+  <section class="view active" id="view-overview">
+    <h2 class="view-title">区域总览</h2>
+    <p class="view-sub">池体轮廓与喷头组短线为现场相对位置；水质数值标注在池体旁。点击池体卡片可登记补水、投药与现场异常。</p>
+    <div id="zoneBoards"></div>
+
+    <div class="grid cards-2">
+      <div class="card">
+        <h3>现场操作</h3>
+        <form class="inline" id="form-start">
+          <select name="schedule_id" id="startSched"></select>
+          <button type="submit">按计划启动（先校验）</button>
+        </form>
+        <form class="inline" id="form-refill">
+          <select name="pool_id" class="pool-select"></select>
+          <input type="number" name="amount" value="500" min="1" step="10" aria-label="补水量升">
+          <span class="hint">L</span>
+          <button type="submit">补水登记</button>
+        </form>
+        <form class="inline" id="form-visitor">
+          <select name="pool_id" class="pool-select"></select>
+          <button type="submit" class="btn red">游客进入封控区 · 紧急停喷</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>演示适配器注入（水位 / 水质 / 泵温 / 堵塞 / 天气）</h3>
+        <form class="inline" id="form-scenario">
+          <select name="pool_id" class="pool-select"></select>
+          <select name="kind">
+            <option value="clear">恢复正常读数</option>
+            <option value="low_water">水位不足 0.62 m</option>
+            <option value="turbidity">浊度超限 7.8 NTU</option>
+            <option value="chlorine_low">余氯过低 0.12 mg/L</option>
+            <option value="overheat">泵体过热 82 ℃</option>
+            <option value="clog">喷头堵塞</option>
+          </select>
+          <button type="submit" class="btn gray">注入</button>
+        </form>
+        <form class="inline" id="form-weather">
+          <select name="code">
+            <option value="clear">晴好</option>
+            <option value="cloudy">多云</option>
+            <option value="heavy_rain">暴雨</option>
+            <option value="storm">雷暴</option>
+            <option value="typhoon">台风</option>
+          </select>
+          <input type="number" name="wind_level" value="2" min="0" max="12" aria-label="风力等级">
+          <span class="hint">级风</span>
+          <button type="submit" class="btn gray">设置天气</button>
+        </form>
+        <p class="hint small" style="margin:8px 0 0">≥ 6 级风或暴雨/雷暴/台风会自动停运运行中的喷泉。</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>最近事件与处置</h3>
+      <div id="eventList"></div>
+    </div>
+  </section>
+
+  <!-- 2 运行日历 -->
+  <section class="view" id="view-calendar">
+    <h2 class="view-title">运行日历</h2>
+    <p class="view-sub">时间带为今日计划运行区间（06:00–22:00 刻度），未运行的时段保持安静；停运原因以文字标注在时间带下方。</p>
+    <div class="card">
+      <div class="legend-row">
+        <span><i class="sw" style="background:var(--blue)"></i>运行中 / 已运行</span>
+        <span><i class="sw" style="background:var(--card-2);border:1px dashed var(--muted)"></i>正常停运</span>
+        <span><i class="sw" style="background:var(--red)"></i>条件不足阻断</span>
+        <span><i class="sw" style="background:var(--amber)"></i>天气停运</span>
+        <span><i class="sw" style="background:var(--ink);width:2px"></i>当前时刻</span>
+      </div>
+      <div id="calendarBands"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>近 14 天运行记录</h3>
+      <div id="calendarHistory"></div>
+    </div>
+  </section>
+
+  <!-- 3 水质记录 -->
+  <section class="view" id="view-water">
+    <h2 class="view-title">水质记录</h2>
+    <p class="view-sub">浊度、余氯、水位趋势，仅保留必要的阈值线；红点表示该次读数越限。</p>
+    <div class="card">
+      <form class="inline">
+        <select id="waterPool" class="pool-select"></select>
+        <select id="waterHours">
+          <option value="24">近 24 小时</option>
+          <option value="48" selected>近 48 小时</option>
+          <option value="72">近 72 小时</option>
+        </select>
+        <span class="hint" id="waterMeta"></span>
+      </form>
+      <div id="waterCharts"></div>
+    </div>
+    <div class="grid cards-2" style="margin-top:14px">
+      <div class="card">
+        <h3>人工采样 / 复测登记</h3>
+        <form class="inline" id="form-sample">
+          <select name="pool_id" class="pool-select"></select>
+          水位 <input type="number" name="water_level" step="0.01" value="1.15"> m
+          浊度 <input type="number" name="turbidity" step="0.1" value="2.6"> NTU
+          余氯 <input type="number" name="chlorine" step="0.01" value="0.6"> mg/L
+          <button type="submit">提交采样</button>
+        </form>
+        <p class="hint small">复开水质复测请在“清池流程/故障维修”中点击「水质复测」。</p>
+      </div>
+      <div class="card">
+        <h3>最新读数（各池）</h3>
+        <table class="tbl">
+          <thead><tr><th>水池</th><th class="num">水位 m</th><th class="num">浊度 NTU</th><th class="num">余氯 mg/L</th><th>时间</th></tr></thead>
+          <tbody id="latestSamples"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 泵组状态 -->
+  <section class="view" id="view-pumps">
+    <h2 class="view-title">泵组状态</h2>
+    <p class="view-sub">循环泵运行/故障/保养状态与实时温度（演示适配器）。过热阈值 75 ℃。</p>
+    <div class="grid cards-3" id="pumpCards"></div>
+  </section>
+
+  <!-- 5 药剂台账 -->
+  <section class="view" id="view-chemical">
+    <h2 class="view-title">药剂台账</h2>
+    <p class="view-sub">每次投放记录在案并进入观察期（默认 30 分钟，期内禁止启动）；单次超过 12 L 判为药剂超量，停喷等待复测。</p>
+    <div class="grid cards-2">
+      <div class="card">
+        <h3>药剂投放</h3>
+        <form class="inline" id="form-chemical">
+          <select name="pool_id" class="pool-select"></select>
+          <select name="agent">
+            <option>含氯消毒剂</option><option>絮凝剂</option><option>除藻剂</option>
+          </select>
+          <input type="number" name="amount" value="6" step="0.5" min="0"> L
+          <button type="submit">投放并开始观察期</button>
+        </form>
+        <p class="hint small">观察期内运行计划自动阻断；观察期结束后调度器自动重试启动。</p>
+      </div>
+      <div class="card">
+        <h3>补水记录</h3>
+        <table class="tbl"><thead><tr><th>时间</th><th>水池</th><th class="num">水量 L</th><th>操作人</th></tr></thead>
+        <tbody id="refillRows"></tbody></table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>投放台账</h3>
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>水池</th><th>药剂</th><th class="num">数量</th><th>观察期截止</th><th>操作人</th><th>状态</th></tr></thead>
+        <tbody id="chemicalRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6 清池流程 -->
+  <section class="view" id="view-clean">
+    <h2 class="view-title">清池流程</h2>
+    <p class="view-sub">清池锁定整个水池并暂停运行计划（与计划互斥）；作业结束后必须完成水质复测与喷头试运行，再由主管批准复开。</p>
+    <div class="card">
+      <h3>发起清池</h3>
+      <form class="inline" id="form-clean">
+        <select name="pool_id" class="pool-select"></select>
+        <input type="text" name="note" placeholder="说明（如季度清池）" style="width:240px">
+        <button type="submit" class="btn green">锁定水池并开始清池</button>
+      </form>
+    </div>
+    <div id="cleanCards" style="margin-top:14px"></div>
+  </section>
+
+  <!-- 7 故障维修 -->
+  <section class="view" id="view-fault">
+    <h2 class="view-title">故障维修</h2>
+    <p class="view-sub">喷头堵塞、泵体过热等故障自动停运锁定；养护员修复后，同样须复测 + 试运行 + 主管复开。</p>
+    <div class="card">
+      <h3>登记故障</h3>
+      <form class="inline" id="form-fault">
+        <select name="pool_id" class="pool-select"></select>
+        <select name="kind">
+          <option value="nozzle_clog">喷头堵塞</option>
+          <option value="pump_overheat">泵体过热</option>
+          <option value="other">其他故障</option>
+        </select>
+        <input type="text" name="detail" placeholder="故障描述" style="width:260px">
+        <button type="submit" class="btn red">故障停运</button>
+      </form>
+    </div>
+    <div id="faultCards" style="margin-top:14px"></div>
+  </section>
+
+  <!-- 8 复开审批 -->
+  <section class="view" id="view-reopen">
+    <h2 class="view-title">复开审批</h2>
+    <p class="view-sub">养护员发起复开申请；水质复测与喷头试运行缺失时主管退回。越限复开仅主管可批准。</p>
+    <div id="reopenCards"></div>
+  </section>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+<div class="flash" id="flash"></div>
+<script src="/app.js"></script>
+</body>
+</html>
